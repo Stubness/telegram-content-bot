@@ -34,6 +34,10 @@ def register_handlers(dp: Dispatcher):
                 reply_markup=keyboard
             )
             print("✅ Переслано админу")
+
+            # 👇 Вот это добавлено: обратная связь пользователю
+            await message.reply("✅ Thank you! Your content has been submitted for review.")
+
         except Exception as e:
             print(f"❌ Ошибка при пересылке админу: {e}")
 
