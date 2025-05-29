@@ -1,0 +1,43 @@
+name: Schedule Bot Runtime
+
+on:
+  schedule:
+    - cron: '0 2 * * *'     # Запуск в 05:00 по Киеву
+    - cron: '0 20 * * *'    # Остановка в 23:00 по Киеву
+  workflow_dispatch:
+
+jobs:
+  toggle-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Toggle Railway Service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          PROJECT_NAME: "pretty-comfort"
+          SERVICE_NAME: "telegram-content-bot"
+        run: |
+          get_project_id() {
+            curl -s -H "Authorization: $RAILWAY_TOKEN" https://backboard.railway.app/graphql \
+              -d '{"query":"{ projects { edges { node { id name }}}}"}' \
+              | jq -r --arg name "$PROJECT_NAME" '.data.projects.edges[].node | select(.name==$name) | .id'
+          }
+
+          get_service_id() {
+            curl -s -H "Authorization: $RAILWAY_TOKEN" https://backboard.railway.app/graphql \
+              -d "{\"query\":\"{ project(id: \\\"$1\\\") { services { edges { node { id name }}}}}\"}" \
+              | jq -r --arg name "$SERVICE_NAME" '.data.project.services.edges[].node | select(.name==$name) | .id'
+          }
+
+          PROJECT_ID=$(get_project_id)
+          SERVICE_ID=$(get_service_id "$PROJECT_ID")
+
+          if [[ "${{ github.event.schedule }}" == "0 2 * * *" ]]; then
+            ACTION="start"
+          else
+            ACTION="stop"
+          fi
+
+          curl -s -X POST https://backboard.railway.app/graphql \
+            -H "Authorization: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"mutation { service${ACTION^}(id: \\\"$SERVICE_ID\\\") { id }}\"}"
