@@ -2,15 +2,15 @@ name: Schedule Bot Runtime
 
 on:
   schedule:
-    - cron: '0 2 * * *'    # 05:00 по Киеву — запуск
-    - cron: '0 20 * * *'   # 23:00 по Киеву — остановка
+    - cron: '0 2 * * *'     # 05:00 по Киеву — Включить
+    - cron: '0 20 * * *'    # 23:00 по Киеву — Выключить
+  workflow_dispatch:
 
 jobs:
-  start-bot:
-    if: github.event.schedule == '0 2 * * *'
+  toggle-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Start Railway Service
+      - name: Toggle Railway Service
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           PROJECT_NAME: "pretty-comfort"
@@ -31,38 +31,17 @@ jobs:
           PROJECT_ID=$(get_project_id)
           SERVICE_ID=$(get_service_id "$PROJECT_ID")
 
-          curl -s -X POST https://backboard.railway.app/graphql \
-            -H "Authorization: $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation { serviceStart(id: \\\"$SERVICE_ID\\\") { id }}\"}"
+          HOUR=$(date -u +"%H")
 
-  stop-bot:
-    if: github.event.schedule == '0 20 * * *'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Stop Railway Service
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          PROJECT_NAME: "pretty-comfort"
-          SERVICE_NAME: "telegram-content-bot"
-        run: |
-          get_project_id() {
-            curl -s -H "Authorization: $RAILWAY_TOKEN" https://backboard.railway.app/graphql \
-              -d '{"query":"{ projects { edges { node { id name }}}}"}' \
-              | jq -r --arg name "$PROJECT_NAME" '.data.projects.edges[].node | select(.name==$name) | .id'
-          }
+          if [ "$HOUR" -eq 2 ]; then
+            ACTION="start"
+          else
+            ACTION="stop"
+          fi
 
-          get_service_id() {
-            curl -s -H "Authorization: $RAILWAY_TOKEN" https://backboard.railway.app/graphql \
-              -d "{\"query\":\"{ project(id: \\\"$1\\\") { services { edges { node { id name }}}}}\"}" \
-              | jq -r --arg name "$SERVICE_NAME" '.data.project.services.edges[].node | select(.name==$name) | .id'
-          }
-
-          PROJECT_ID=$(get_project_id)
-          SERVICE_ID=$(get_service_id "$PROJECT_ID")
+          echo "⏱️ Detected action: $ACTION"
 
           curl -s -X POST https://backboard.railway.app/graphql \
             -H "Authorization: $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation { serviceStop(id: \\\"$SERVICE_ID\\\") { id }}\"}"
-
+            -d "{\"query\":\"mutation { service${ACTION^}(id: \\\"$SERVICE_ID\\\") { id }}\"}"
